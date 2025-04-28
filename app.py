@@ -13,13 +13,15 @@ import streamlit as st
 from sentence_transformers import SentenceTransformer, util
 from fuzzywuzzy import fuzz
 import numpy as np
+import faiss
+
 
 st.set_page_config(page_title="Smart Product Search", page_icon="🛍️", layout="centered")
 
 # Load model once and cache it
 @st.cache_resource
 def load_model():
-    return SentenceTransformer('multi-qa-MiniLM-L6-cos-v1')
+    return SentenceTransformer('all-mpnet-base-v2')
 
 model = load_model()
 
@@ -34,7 +36,16 @@ products = [
 def get_product_embeddings(products_list):
     return model.encode(products_list, convert_to_tensor=True)
 
-product_embeddings = get_product_embeddings(products)
+@st.cache_resource
+def build_faiss_index(products_list):
+    embeddings = model.encode(products_list, convert_to_numpy=True)
+    dimension = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dimension)
+    index.add(embeddings)
+    return index, embeddings
+
+faiss_index, product_embeddings = build_faiss_index(products)
+
 
 # Functions
 def preprocess_query(query):
@@ -61,13 +72,17 @@ def combine_scores(cosine_scores, fuzzy_scores, ai_weight=0.7, fuzzy_weight=0.3)
 def search_products(query, top_k=10):
     """Search products given a query."""
     query_clean = preprocess_query(query)
-    ai_scores = get_ai_scores(query_clean)
-    fuzzy_scores = get_fuzzy_scores(query_clean)
+    query_embedding = model.encode([query_clean], convert_to_numpy=True)
+
+    # Use FAISS to get top K
+    distances, indices = faiss_index.search(query_embedding, top_k)
+
+    ai_scores = 1 - distances[0]  # FAISS returns L2 distance, invert to similarity
+    fuzzy_scores = [fuzz.token_set_ratio(query_clean, products[i].lower()) / 100 for i in indices[0]]
     final_scores = combine_scores(ai_scores, fuzzy_scores)
 
-    # Get top_k results
-    top_indices = np.argsort(-final_scores)[:top_k]
-    return [(products[i], final_scores[i]) for i in top_indices]
+    return [(products[i], final_scores[j]) for j, i in enumerate(indices[0])]
+
 
 # Streamlit App
 
