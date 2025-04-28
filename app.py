@@ -21,7 +21,7 @@ model = load_model()
 
 # Load products from CSV and cache
 @st.cache_data
-def load_products(csv_path="/Users/jiyasinghal/Desktop/cleaned_products.csv"):
+def load_products(csv_path="cleaned_products.csv"):
     df = pd.read_csv(
         csv_path,
         encoding='latin1'
