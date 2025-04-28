@@ -1,4 +1,6 @@
 streamlit
 sentence-transformers
 fuzzywuzzy
-faiss
+python-Levenshtein
+faiss-cpu
+numpy
