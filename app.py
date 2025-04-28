@@ -61,7 +61,14 @@ def preprocess_query(query):
 
 def get_fuzzy_scores(query_clean, indices):
     """Compute fuzzy matching scores for selected candidates."""
-    return [fuzz.token_set_ratio(query_clean, products[i].lower()) / 100 for i in indices]
+    fuzzy_scores = [fuzz.token_set_ratio(query_clean, products[i].lower()) / 100 for i in indices]
+    
+    # Check for partial substring match and boost the score if there's a match
+    substring_boost = [1.0 if query_clean in products[i].lower() else 0.0 for i in indices]
+    
+    return fuzzy_scores, substring_boost
+
+
 
 def search_products(query, top_k=10):
     query_clean = preprocess_query(query)
@@ -70,15 +77,16 @@ def search_products(query, top_k=10):
     distances, indices = faiss_index.search(query_embedding, top_k * 3)  # Search top 30 initially
     ai_scores = 1 - distances[0]  # Convert L2 distance to cosine similarity
 
-    fuzzy_scores = get_fuzzy_scores(query_clean, indices[0])
+    fuzzy_scores, substring_boost = get_fuzzy_scores(query_clean, indices[0])
 
     startswith_boost = [1.0 if products[i].lower().startswith(query_clean) else 0.0 for i in indices[0]]
 
-    # Final scoring, with weights adjusted for AI, fuzzy, and startswith
+    # Final scoring, with weights adjusted for AI, fuzzy, startswith, and substring boosts
     final_scores = (
-        np.array(0.5) * np.array(ai_scores) +  # Increased AI weight
-        np.array(0.5) * np.array(fuzzy_scores) +  # Reduced fuzzy match weight
-        np.array(0.0) * np.array(startswith_boost)
+        np.array(0.4) * np.array(ai_scores) +  # Reduced AI weight
+        np.array(0.4) * np.array(fuzzy_scores) +  # Reduced fuzzy match weight
+        np.array(0.1) * np.array(startswith_boost) +  # Low weight on startswith
+        np.array(0.1) * np.array(substring_boost)  # Boost for partial matches
     )
 
     # Filter results with low scores (only keep results above 10% match)
@@ -87,6 +95,7 @@ def search_products(query, top_k=10):
     top_k_indices = filtered_indices[np.argsort(-final_scores[filtered_indices])][:top_k]
 
     return [(products[indices[0][i]], final_scores[i]) for i in top_k_indices]
+
 
 # Streamlit App Frontend
 st.title("🛍️ Smart Product Search (AI + Fuzzy Matching)")
