@@ -76,9 +76,9 @@ def search_products(query, top_k=10):
 
     # Final scoring, with weights adjusted for AI, fuzzy, and startswith
     final_scores = (
-        np.array(0.6) * np.array(ai_scores) +  # Increased AI weight
-        np.array(0.3) * np.array(fuzzy_scores) +  # Reduced fuzzy match weight
-        np.array(0.1) * np.array(startswith_boost)
+        np.array(0.5) * np.array(ai_scores) +  # Increased AI weight
+        np.array(0.5) * np.array(fuzzy_scores) +  # Reduced fuzzy match weight
+        np.array(0.0) * np.array(startswith_boost)
     )
 
     # Filter results with low scores (only keep results above 10% match)
