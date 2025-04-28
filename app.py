@@ -7,10 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1sx3xlM99oQxlV7G-i4bOUvRMVMSns3sZ
 """
 
-pip install streamlit
-
-!pip install -q sentence-transformers fuzzywuzzy
-
 # streamlit_app.py
 
 import streamlit as st
@@ -18,55 +14,70 @@ from sentence_transformers import SentenceTransformer, util
 from fuzzywuzzy import fuzz
 import numpy as np
 
-# Load model once
+st.set_page_config(page_title="Smart Product Search", page_icon="🛍️", layout="centered")
+
+# Load model once and cache it
 @st.cache_resource
 def load_model():
-    return SentenceTransformer('all-MiniLM-L6-v2')
+    return SentenceTransformer('multi-qa-MiniLM-L6-cos-v1')
 
 model = load_model()
 
-# Product list
+# Product list (replace with your real large catalog)
 products = [
     "Green Shirt", "Blue Jeans", "Green Apple", "Red Cap", "Green Tea",
-    "White Sneakers", "Black Hoodie", "Eco Water Bottle", "Organic Shampoo",
-    "Laptop Backpack", "Wireless Earbuds", "Sports Watch", "Fitness Band",
-    "Yoga Mat", "Leather Wallet", "Scented Candle", "Cotton Towels",
-    "LED Desk Lamp", "Bluetooth Speaker", "Electric Toothbrush",
-    "Running Shoes", "Bamboo Tumbler", "Travel Mug", "Green Smoothie Mix"
+    "Running Shoes", "Bamboo Tumbler", "Travel Mug", "Green Smoothie Mix", "green tea extract", "organic green tea", "Dried Natural Green Tea", "Black Tea - Color: Green", "Top Tee Tulsi Green Tea", "Brown Joules Green Tea Mint", "Assam Green Tea" , "Green Tea Premix" , "Lemon Green Tea", "Ayurvedic Herbal Tea", "Pure Green tea", "Rose Green Tea", "Green Tea leaves", "Servo Voltage Stabilizer" , "Air Cooled Servo Stabilizers", "Ac Voltage Stabilizer" , "Oil Cooled Servo Stabilizer", "Automatic Stabilizer", "Three Phase Voltage Stabilizer", "Linear Servo Voltage Stabilizer", "Servo Controlled Voltage Stabilizer", "Three Phase Servo Voltage Stabilizer", "Air Cooled Servo Stabilizer" , "Servo Stabilizer", "Manual Voltage Stabilizer", "Industrial Voltage Stabilizer", "Automatic Voltage Stabilizer", "Electronic Voltage Stabilizer", "green board", " green coconut"
 ]
+
+# Precompute product embeddings once and cache them
+@st.cache_resource
+def get_product_embeddings(products_list):
+    return model.encode(products_list, convert_to_tensor=True)
+
+product_embeddings = get_product_embeddings(products)
 
 # Functions
 def preprocess_query(query):
+    """Lowercase and strip user query."""
     return query.lower().strip()
 
-def get_ai_scores(query_clean, products):
-    product_embeddings = model.encode(products, convert_to_tensor=True)
+def get_ai_scores(query_clean):
+    """Compute cosine similarity scores between query and products."""
     query_embedding = model.encode(query_clean, convert_to_tensor=True)
-    return util.cos_sim(query_embedding, product_embeddings)[0].cpu().numpy()
+    scores = util.cos_sim(query_embedding, product_embeddings)[0].cpu().numpy()
+    return scores
 
-def get_fuzzy_scores(query_clean, products):
+def get_fuzzy_scores(query_clean):
+    """Compute fuzzy matching scores."""
     return [fuzz.token_set_ratio(query_clean, p.lower()) / 100 for p in products]
 
-def combine_scores(cosine_scores, fuzzy_scores, products, ai_weight=0.5, fuzzy_weight=0.5):
-    return [
-        (products[i], ai_weight * cosine_scores[i] + fuzzy_weight * fuzzy_scores[i])
-        for i in range(len(products))
-    ]
+def combine_scores(cosine_scores, fuzzy_scores, ai_weight=0.7, fuzzy_weight=0.3):
+    """Combine AI and fuzzy scores."""
+    return (
+        np.array(ai_weight) * np.array(cosine_scores) +
+        np.array(fuzzy_weight) * np.array(fuzzy_scores)
+    )
 
-def search_products(query, products, top_k=10):
+def search_products(query, top_k=10):
+    """Search products given a query."""
     query_clean = preprocess_query(query)
-    ai_scores = get_ai_scores(query_clean, products)
-    fuzzy_scores = get_fuzzy_scores(query_clean, products)
-    final_scores = combine_scores(ai_scores, fuzzy_scores, products)
-    return sorted(final_scores, key=lambda x: x[1], reverse=True)[:top_k]
+    ai_scores = get_ai_scores(query_clean)
+    fuzzy_scores = get_fuzzy_scores(query_clean)
+    final_scores = combine_scores(ai_scores, fuzzy_scores)
 
-# Streamlit UI
+    # Get top_k results
+    top_indices = np.argsort(-final_scores)[:top_k]
+    return [(products[i], final_scores[i]) for i in top_indices]
+
+# Streamlit App
+
 st.title("🛍️ Smart Product Search (AI + Fuzzy Matching)")
 
-query = st.text_input("Type a product name:", placeholder="Try 'gren tee' or 'blu jeenz'")
+query = st.text_input("Type a product name:", placeholder="Try 'green tea' or 'blue jean'")
 
 if query:
-    results = search_products(query, products)
+    with st.spinner('Searching...'):
+        results = search_products(query)
     st.subheader("Top Matches:")
     for name, score in results:
         st.write(f"🔹 **{name}** — {score * 100:.2f}% match")
