@@ -4,3 +4,4 @@ fuzzywuzzy
 python-Levenshtein
 faiss-cpu
 numpy
+pandas
