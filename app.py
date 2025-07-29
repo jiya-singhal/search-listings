@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-
-# streamlit_app.py
-
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 from fuzzywuzzy import fuzz
